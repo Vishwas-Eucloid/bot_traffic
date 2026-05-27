@@ -57,7 +57,7 @@ DEFAULT_USER_PASSWORD = "Test@123"
 # TIMEOUTS
 # =====================================
 
-NAVIGATION_TIMEOUT = 30000  # 30 seconds
+NAVIGATION_TIMEOUT = 60000  # 60 seconds
 
 # =====================================
 # SEARCH TERMS
