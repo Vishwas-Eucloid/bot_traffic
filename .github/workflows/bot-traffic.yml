@@ -1,0 +1,151 @@
+name: Bot Traffic CDP Runner
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-traffic-cdp
+  cancel-in-progress: false
+
+jobs:
+  run-bot-traffic:
+    name: Run bot traffic through Chrome CDP
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      CHROME_CDP: http://127.0.0.1:9222
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install Google Chrome Stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          google-chrome-stable --version
+
+      - name: Start Chrome with CDP enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome_profile="${RUNNER_TEMP}/chrome-profile"
+          chrome_log="${RUNNER_TEMP}/chrome-cdp.log"
+          mkdir -p "${chrome_profile}"
+
+          google-chrome-stable \
+            --headless=new \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=9222 \
+            --user-data-dir="${chrome_profile}" \
+            --no-first-run \
+            --no-default-browser-check \
+            --disable-extensions \
+            --disable-component-extensions-with-background-pages \
+            --disable-popup-blocking \
+            --no-proxy-server \
+            --disable-features=TrackingProtection3pcd \
+            about:blank > "${chrome_log}" 2>&1 &
+
+          echo "$!" > "${RUNNER_TEMP}/chrome.pid"
+
+          for _ in {1..30}; do
+            if curl -fsS "${CHROME_CDP}/json/version" > "${RUNNER_TEMP}/chrome-version.json"; then
+              cat "${RUNNER_TEMP}/chrome-version.json"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Chrome did not expose CDP on ${CHROME_CDP}"
+          cat "${chrome_log}" || true
+          exit 1
+
+      - name: Verify analytics endpoints are reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://www.googletagmanager.com/gtag/js?id=G-TEST"
+            "https://www.google-analytics.com/g/collect"
+            "https://app.posthog.com/capture/"
+            "https://us.i.posthog.com/capture/"
+            "https://eu.i.posthog.com/capture/"
+          )
+
+          for url in "${urls[@]}"; do
+            code="$(curl -L -sS -o /dev/null -w '%{http_code}' --connect-timeout 20 --max-time 30 "${url}" || true)"
+            echo "${url} -> HTTP ${code}"
+            if [ "${code}" = "000" ]; then
+              echo "Network connection failed for ${url}"
+              exit 1
+            fi
+          done
+
+      - name: Verify target site is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_url="$(python -c 'from config import BASE_URL; print(BASE_URL)')"
+          code="$(curl -L -sS -o /dev/null -w '%{http_code}' --connect-timeout 20 --max-time 60 "${target_url}" || true)"
+          echo "${target_url} -> HTTP ${code}"
+          if [ "${code}" = "000" ]; then
+            echo "Target site was not reachable from the GitHub runner"
+            exit 1
+          fi
+
+      - name: Ensure SQLite storage exists
+        run: python -c "from database import create_tables; create_tables()"
+
+      - name: Run bot traffic
+        run: python main.py
+
+      - name: Stop Chrome
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "${RUNNER_TEMP}/chrome.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/chrome.pid")" 2>/dev/null || true
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-traffic-diagnostics
+          path: |
+            ${{ runner.temp }}/chrome-cdp.log
+            ${{ runner.temp }}/chrome-version.json
+            debug_timeout_*.png
+            login_failure.png
+          if-no-files-found: ignore
+          retention-days: 7
