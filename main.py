@@ -7,6 +7,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from playwright.sync_api import sync_playwright
+
+from core.analytics import AnalyticsMonitor, wait_for_analytics_flush
+
+from core.browser_runtime import build_context_options
  
 # Import parameters from your configuration
 
@@ -98,9 +102,13 @@ def run_single_bot(session_id, journey_name):
 
             # new_context creates an isolated session (cookies/storage) within that Chrome instance
 
-            context = browser.new_context()
+            context = browser.new_context(**build_context_options())
 
             page = context.new_page()
+
+            analytics_monitor = AnalyticsMonitor(f"Session #{session_id}")
+
+            analytics_monitor.attach(page)
  
             # --- PRE-ROUTING AUTH SELECTION ---
 
@@ -143,6 +151,14 @@ def run_single_bot(session_id, journey_name):
         finally:
 
             # Securely cleanup all memory scopes at thread termination
+
+            if 'page' in locals():
+
+                wait_for_analytics_flush(page, f"Session #{session_id}")
+
+            if 'analytics_monitor' in locals():
+
+                analytics_monitor.print_summary()
 
             if 'context' in locals():
 
@@ -187,14 +203,13 @@ def main():
             # larger stagger prevents overwhelming the Chrome debugging websocket port.
 
             time.sleep(random.uniform(1.0, 2.5))
- 
+
     print("\n==================================================")
 
     print("   SUCCESS: ALL SIMULATED TRAFFIC PATHS REPLICA COMPLETE")
 
     print("==================================================")
- 
+
 if __name__ == "__main__":
 
     main()
- 

@@ -20,6 +20,12 @@ jobs:
 
     env:
       CHROME_CDP: http://127.0.0.1:9222
+      DISPLAY: ":99"
+      ANALYTICS_FLUSH_MS: "10000"
+      BOT_LOCALE: en-US
+      BOT_TIMEZONE: America/New_York
+      BOT_VIEWPORT_WIDTH: "1365"
+      BOT_VIEWPORT_HEIGHT: "900"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
@@ -43,13 +49,29 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl gnupg
+          sudo apt-get install -y ca-certificates curl fonts-liberation gnupg xauth xvfb
           sudo install -m 0755 -d /etc/apt/keyrings
           curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
           echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list > /dev/null
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
           google-chrome-stable --version
+
+      - name: Configure browser user agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome_version="$(google-chrome-stable --version | awk '{print $3}')"
+          chrome_major="${chrome_version%%.*}"
+          echo "BOT_USER_AGENT=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chrome_major}.0.0.0 Safari/537.36" >> "${GITHUB_ENV}"
+
+      - name: Start virtual display
+        shell: bash
+        run: |
+          set -euo pipefail
+          Xvfb "${DISPLAY}" -screen 0 1920x1080x24 -ac -nolisten tcp > "${RUNNER_TEMP}/xvfb.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/xvfb.pid"
+          sleep 2
 
       - name: Start Chrome with CDP enabled
         shell: bash
@@ -60,20 +82,20 @@ jobs:
           mkdir -p "${chrome_profile}"
 
           google-chrome-stable \
-            --headless=new \
             --no-sandbox \
             --disable-dev-shm-usage \
             --disable-gpu \
             --remote-debugging-address=127.0.0.1 \
             --remote-debugging-port=9222 \
             --user-data-dir="${chrome_profile}" \
+            --window-size=1365,900 \
             --no-first-run \
             --no-default-browser-check \
             --disable-extensions \
             --disable-component-extensions-with-background-pages \
             --disable-popup-blocking \
             --no-proxy-server \
-            --disable-features=TrackingProtection3pcd \
+            --disable-features=SubresourceFilter,TrackingProtection3pcd \
             about:blank > "${chrome_log}" 2>&1 &
 
           echo "$!" > "${RUNNER_TEMP}/chrome.pid"
@@ -126,6 +148,9 @@ jobs:
       - name: Ensure SQLite storage exists
         run: python -c "from database import create_tables; create_tables()"
 
+      - name: Probe analytics through Chrome CDP
+        run: python scripts/analytics_cdp_probe.py --output analytics-probe.json --screenshot analytics-probe.png --strict
+
       - name: Run bot traffic
         run: python main.py
 
@@ -136,6 +161,9 @@ jobs:
           if [ -f "${RUNNER_TEMP}/chrome.pid" ]; then
             kill "$(cat "${RUNNER_TEMP}/chrome.pid")" 2>/dev/null || true
           fi
+          if [ -f "${RUNNER_TEMP}/xvfb.pid" ]; then
+            kill "$(cat "${RUNNER_TEMP}/xvfb.pid")" 2>/dev/null || true
+          fi
 
       - name: Upload diagnostics
         if: always()
@@ -145,6 +173,9 @@ jobs:
           path: |
             ${{ runner.temp }}/chrome-cdp.log
             ${{ runner.temp }}/chrome-version.json
+            ${{ runner.temp }}/xvfb.log
+            analytics-probe.json
+            analytics-probe.png
             debug_timeout_*.png
             login_failure.png
           if-no-files-found: ignore
