@@ -27,6 +27,7 @@ jobs:
       BOT_VIEWPORT_WIDTH: "1365"
       BOT_VIEWPORT_HEIGHT: "900"
       PYTHONUNBUFFERED: "1"
+      PYTHONPATH: ${{ github.workspace }}
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
     steps:
