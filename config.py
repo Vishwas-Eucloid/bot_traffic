@@ -11,7 +11,7 @@ CHROME_CDP_URL = "http://127.0.0.1:9222"
 # DAILY TRAFFIC
 # =====================================
 
-TOTAL_DAILY_USERS = 50
+TOTAL_DAILY_USERS = 500
 MAX_PARALLEL_USERS = 1
 
 # =====================================
