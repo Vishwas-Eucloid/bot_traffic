@@ -1,1 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Database and journal files
+*.db-journal
+
+# Project-specific generated or large files
+*.pma
+component_crx_cache/
+extensions_crx_cache/
+BrowserMetrics*/
+Crashpad/
+Crowd Deny/
+Default/
+Local State
+Last Browser
+Last Version
+First Run/
+first_party_sets.db-journal
+OnDeviceHeadSuggestModel/
+MEIPreload/
+OptimizationHints/
+OptimizationGuideModelStore/
+ShaderCache/
+WasmTtsEngine/
+WidevineCdm/
+Storage/
+Subresource Filter/
+Safe Browsing/
+Journeys/
+journeys/
+Variations/
+ActorSafetyLists/
+CaptchaProviders/
+CertificateRevocation/
+component_crx_cache/
+
+# Logs and temp
+*.log
+tmp/
+temp/
+
+# IDEs and editors
+.vscode/
+.idea/
 Default/Extensions/
