@@ -55,4 +55,13 @@ temp/
 # IDEs and editors
 .vscode/
 .idea/
+
+# Cache and DBs to ignore
+GrShaderCache/
+GraphiteDawnCache/
+__pycache__/
+*.pyc
+first_party_sets.db
+segmentation_platform/ukm_db/
+storage/bot_users.db
 Default/Extensions/
