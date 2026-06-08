@@ -62,6 +62,7 @@ GraphiteDawnCache/
 __pycache__/
 *.pyc
 first_party_sets.db
+segmentation_platform/ukm_db
 segmentation_platform/ukm_db/
 storage/bot_users.db
 Default/Extensions/
