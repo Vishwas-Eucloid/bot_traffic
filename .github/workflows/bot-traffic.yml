@@ -2,8 +2,8 @@ name: Bot Traffic CDP Runner
 
 on:
   schedule:
-    - cron: "17 4 * * *"  # Runs Part 1 at 4:17 AM UTC
-    - cron: "17 8 * * *"  # Runs Part 2 at 8:17 AM UTC (4 hours later)
+    - cron: "0 4 * * *"  # Runs Part 1 at 4:00 AM UTC
+    - cron: "0 8 * * *"  # Runs Part 2 at 8:00 AM UTC (4 hours later)
   workflow_dispatch:
 
 permissions:
