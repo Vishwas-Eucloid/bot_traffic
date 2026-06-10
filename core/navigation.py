@@ -248,16 +248,34 @@ def fill_checkout_form(page):
         print(f"  -> [Nav] Checkout form fill error: {e}")
 
 def place_order(page):
-    """Clicks Place Order to complete a purchase."""
+    """Clicks Place Order to complete a purchase, safely waiting for API resolution."""
     print("  -> [Nav] Placing order")
+    
     try:
+        # 1. Wait for the button to be ready
         page.wait_for_selector(selectors.PLACE_ORDER_TEXT, state="visible", timeout=15000)
-        
         place_btn = page.locator(selectors.PLACE_ORDER_TEXT).first
-        human_click_element(place_btn)
         
-        page.wait_for_url("**/thank-you*", timeout=NAVIGATION_TIMEOUT)
-        human_delay(2.0, 3.0)
+        print("  -> [Nav] Clicking Place Order button and waiting for API response...")
         
+        # 2. THE FIX: Catch the actual API network request instead of the URL change.
+        # We give the checkout API a generous 30 seconds to process.
+        with page.expect_response("**/api/orders", timeout=30000) as response_info:
+            human_click_element(place_btn)
+            
+        # 3. Check what the server actually said!
+        response = response_info.value
+        if response.ok:
+            print("  -> [Nav] API confirmed order! Waiting for React to redirect...")
+            # Now it is safe to wait for the thank you page, as the heavy lifting is done
+            page.wait_for_url("**/thank-you*", timeout=15000)
+            human_delay(2.0, 3.0)
+        else:
+            print(f"  -> [Nav] Server rejected the order with status: {response.status}")
+            # Wait briefly to allow React to render the toast error for your analytics
+            human_delay(3.0, 4.0)
+            
     except PlaywrightTimeoutError:
-        print("  -> [Nav] Warning: Timeout waiting for 'Place Order' button.")
+        print("  -> [Nav] ERROR: The checkout process timed out. The server took too long to respond.")
+    except Exception as e:
+        print(f"  -> [Nav] ERROR: An unexpected issue occurred during checkout: {e}")
