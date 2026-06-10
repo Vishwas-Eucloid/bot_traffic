@@ -2,7 +2,8 @@ name: Bot Traffic CDP Runner
 
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "0 4 * * *"  # Runs Part 1 at 4:00 AM UTC
+    - cron: "0 8 * * *"  # Runs Part 2 at 8:00 AM UTC (4 hours later)
   workflow_dispatch:
 
 permissions:
@@ -17,7 +18,6 @@ jobs:
     name: Run bot traffic through Chrome CDP
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
     env:
       CHROME_CDP: http://127.0.0.1:9222
       DISPLAY: ":99"
@@ -81,7 +81,6 @@ jobs:
           chrome_profile="${RUNNER_TEMP}/chrome-profile"
           chrome_log="${RUNNER_TEMP}/chrome-cdp.log"
           mkdir -p "${chrome_profile}"
-
           google-chrome-stable \
             --no-sandbox \
             --disable-dev-shm-usage \
@@ -98,9 +97,7 @@ jobs:
             --no-proxy-server \
             --disable-features=SubresourceFilter,TrackingProtection3pcd \
             about:blank > "${chrome_log}" 2>&1 &
-
           echo "$!" > "${RUNNER_TEMP}/chrome.pid"
-
           for _ in {1..30}; do
             if curl -fsS "${CHROME_CDP}/json/version" > "${RUNNER_TEMP}/chrome-version.json"; then
               cat "${RUNNER_TEMP}/chrome-version.json"
@@ -108,7 +105,6 @@ jobs:
             fi
             sleep 1
           done
-
           echo "Chrome did not expose CDP on ${CHROME_CDP}"
           cat "${chrome_log}" || true
           exit 1
@@ -124,7 +120,6 @@ jobs:
             "https://us.i.posthog.com/capture/"
             "https://eu.i.posthog.com/capture/"
           )
-
           for url in "${urls[@]}"; do
             code="$(curl -L -sS -o /dev/null -w '%{http_code}' --connect-timeout 20 --max-time 30 "${url}" || true)"
             echo "${url} -> HTTP ${code}"
@@ -152,8 +147,17 @@ jobs:
       - name: Probe analytics through Chrome CDP
         run: python scripts/analytics_cdp_probe.py --output analytics-probe.json --screenshot analytics-probe.png --strict
 
-      - name: Run bot traffic
-        run: python main.py
+      # ---------------------------------------------------------
+      # DYNAMIC EXECUTION: Routes to Part 1 or Part 2 based on time
+      # ---------------------------------------------------------
+      - name: Run bot traffic (Part 1 - Bounces & Discovery)
+        if: github.event.schedule == '0 4 * * *'
+        run: python main_part1.py
+
+      - name: Run bot traffic (Part 2 - Carts & Checkouts)
+        if: github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch'
+        run: python main_part2.py
+      # ---------------------------------------------------------
 
       - name: Stop Chrome
         if: always()
