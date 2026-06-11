@@ -1,6 +1,7 @@
 import os
 import random
 import time
+from datetime import datetime
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from playwright.sync_api import sync_playwright
@@ -32,7 +33,6 @@ JOURNEY_MAP = {
 
 def generate_daily_distribution():
     pool = []
-    # It will only generate math for the 5 journeys listed above
     for j_name in JOURNEY_MAP.keys():
         if j_name not in JOURNEY_RANGES:
             continue
@@ -78,7 +78,15 @@ def generate_daily_distribution():
     random.shuffle(pool)
     return pool
 
-def print_distribution_summary(pool):
+def print_distribution_summary(pool, title="SUMMARY"):
+    if not pool:
+        print("\n--------------------------------------------------")
+        print(f"   {title}")
+        print("--------------------------------------------------")
+        print("   No records found.")
+        print("--------------------------------------------------\n")
+        return
+
     summary = defaultdict(lambda: {"total": 0, "mobile": 0, "desktop": 0, "returning": 0, "signup": 0, "guest": 0})
     for session in pool:
         j_name = session["journey_name"]
@@ -91,7 +99,7 @@ def print_distribution_summary(pool):
         else: summary[j_name]["guest"] += 1
 
     print("\n--------------------------------------------------")
-    print("   PART 1: DISCOVERY & BROWSE SUMMARY")
+    print(f"   {title}")
     print("--------------------------------------------------")
     for j_name, stats in summary.items():
         print(f"[{j_name.upper()}]: {stats['total']} Total Runs")
@@ -132,7 +140,7 @@ def run_single_bot(session_id, session_config):
                 print(f"  -> [Session #{session_id}] Authenticating returning user...")
                 if not perform_login(page):
                     print(f"  -> [Session #{session_id}] Login pipeline dropped. Aborting.")
-                    return
+                    return None
             elif user_type == "new_signup":
                 print(f"  -> [Session #{session_id}] Executing initial Guest Signup...")
                 signup_credentials = perform_signup(page)
@@ -145,11 +153,19 @@ def run_single_bot(session_id, session_config):
             journey_module = JOURNEY_MAP.get(journey_name)
             if journey_module:
                 journey_module.run_journey(page)
+                
+                # Timestamp log after successful completion
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[Session #{session_id}] ⏱️ Journey '{journey_name}' completed at {timestamp}")
+                
+                return session_config
             else:
                 print(f"[Session #{session_id}] Error: Route identifier missing: {journey_name}")
+                return None
 
         except Exception as e:
             print(f"[Session #{session_id}] Critical Failure Encountered: {e}")
+            return None
         finally:
             if 'page' in locals():
                 wait_for_analytics_flush(page, f"Session #{session_id}")
@@ -165,19 +181,30 @@ def main():
     print("==================================================\n")
 
     target_traffic_pool = generate_daily_distribution()
-    print_distribution_summary(target_traffic_pool)
+    print_distribution_summary(target_traffic_pool, "PLANNED TARGET DISTRIBUTION - PART 1")
 
     print(f"Total Target Runs for Part 1: {len(target_traffic_pool)}")
     time.sleep(2)
 
+    futures = []
+
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_USERS) as executor:
         for index, session_config in enumerate(target_traffic_pool, start=1):
-            executor.submit(run_single_bot, index, session_config)
+            futures.append(executor.submit(run_single_bot, index, session_config))
             time.sleep(random.uniform(1.0, 2.5))
 
+    successful_runs = []
+    for f in futures:
+        result = f.result()
+        if result is not None:
+            successful_runs.append(result)
+
     print("\n==================================================")
-    print("   SUCCESS: PART 1 COMPLETE")
+    print("   EXECUTION COMPLETE - FINAL REPORT (PART 1)")
     print("==================================================")
+    
+    # This prints the exact same split summary, but only for the bots that succeeded
+    print_distribution_summary(successful_runs, "ACTUAL SUCCESSFUL RUNS - PART 1")
 
 if __name__ == "__main__":
     main()

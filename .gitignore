@@ -1,3 +1,9 @@
+# Ignore everything except the main files
+/*
+!/main_part1.py
+!/main_part2.py
+!/.gitignore
+
 # Python
 __pycache__/
 *.py[cod]
