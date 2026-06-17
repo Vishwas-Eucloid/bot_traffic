@@ -29,6 +29,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: ${{ github.workspace }}
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      BOT_API_SECRET: ${{ secrets.BOT_API_SECRET }}  # <--- INJECTED SECRET HERE
 
     steps:
       - name: Checkout repository
@@ -140,9 +141,6 @@ jobs:
             echo "Target site was not reachable from the GitHub runner"
             exit 1
           fi
-
-      - name: Ensure SQLite storage exists
-        run: python -c "from database import create_tables; create_tables()"
 
       - name: Probe analytics through Chrome CDP
         run: python scripts/analytics_cdp_probe.py --output analytics-probe.json --screenshot analytics-probe.png --strict
