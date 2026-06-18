@@ -6,7 +6,7 @@ from auth.login import perform_login
 from database import create_tables
 
 CDP_URL = os.environ.get("CHROME_CDP", "http://127.0.0.1:9222")
-TARGET_USERS = 150
+TARGET_USERS = 11
 BATCH_SIZE = 10  # Processes 10 users, then restarts the browser connection
 
 def process_batch(p, start_index, end_index):
