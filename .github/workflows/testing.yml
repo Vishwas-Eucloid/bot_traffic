@@ -10,7 +10,7 @@ permissions:
 jobs:
   test-database-flow:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60  # 🚨 INCREASED TO 60 MIN: Allows all 150 users to process
     env:
       CHROME_CDP: http://127.0.0.1:9222
       DISPLAY: ":99"
@@ -25,9 +25,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: storage/bot_users.db
-          key: bot-db-${{ github.run_id }}
+          key: bot-db-v2-${{ github.run_id }} # 🚨 CHANGED TO v2
           restore-keys: |
-            bot-db-
+            bot-db-v2-                        # 🚨 CHANGED TO v2
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -74,4 +74,4 @@ jobs:
         if: always()
         with:
           path: storage/bot_users.db
-          key: bot-db-${{ github.run_id }}
+          key: bot-db-v2-${{ github.run_id }} # 🚨 CHANGED TO v2
