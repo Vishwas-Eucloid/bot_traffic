@@ -7,8 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  actions: write # Needed to save to cache
+  contents: write
 
 concurrency:
   group: bot-traffic-cdp
@@ -34,15 +33,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # --- NEW: Restore the database from the previous run ---
-      - name: Restore SQLite Database Cache
-        uses: actions/cache/restore@v4
-        with:
-          path: database.db
-          key: bot-db-${{ github.run_id }}
-          restore-keys: |
-            bot-db-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -161,13 +151,15 @@ jobs:
         run: python main_part2.py
       # ---------------------------------------------------------
 
-      # --- NEW: Save the updated database for the next run ---
-      - name: Save SQLite Database Cache
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: database.db
-          key: bot-db-${{ github.run_id }}
+      - name: Commit updated user database
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git add storage/bot_users.db
+          git diff --cached --quiet || git commit -m "chore: update bot_users.db [skip ci]"
+          git push
 
       - name: Stop Chrome
         if: always()
