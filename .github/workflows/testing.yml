@@ -1,0 +1,77 @@
+name: Manual SQLite Database Test
+
+on:
+  workflow_dispatch: # This enables the manual "Run workflow" button in GitHub!
+
+permissions:
+  contents: read
+  actions: write # Crucial for saving the cache
+
+jobs:
+  test-database-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CHROME_CDP: http://127.0.0.1:9222
+      DISPLAY: ":99"
+      PYTHONPATH: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- 1. Pull the vault from the cloud ---
+      - name: Restore SQLite Database Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: storage/bot_users.db
+          key: bot-db-${{ github.run_id }}
+          restore-keys: |
+            bot-db-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install Google Chrome Stable & Xvfb
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg xauth xvfb
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Start virtual display & Chrome CDP
+        shell: bash
+        run: |
+          Xvfb "${DISPLAY}" -screen 0 1920x1080x24 -ac -nolisten tcp &
+          sleep 2
+          mkdir -p /tmp/chrome-profile
+          google-chrome-stable --no-sandbox --disable-dev-shm-usage --disable-gpu --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile about:blank &
+          sleep 3
+
+      # --- 2. Run your exact test flow ---
+      - name: Run Signup and Login Handshake
+        run: python testflow.py
+
+      # --- 3. Print the database contents to the GitHub logs! ---
+      - name: Verify Database Contents
+        run: python check_db.py
+
+      # --- 4. Upload the updated vault back to the cloud ---
+      - name: Save SQLite Database Cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: storage/bot_users.db
+          key: bot-db-${{ github.run_id }}
