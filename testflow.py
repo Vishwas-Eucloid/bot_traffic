@@ -1,61 +1,80 @@
 import os
+import time
 from playwright.sync_api import sync_playwright
-
 from auth.signup import perform_signup
 from auth.login import perform_login
 from database import create_tables
 
 CDP_URL = os.environ.get("CHROME_CDP", "http://127.0.0.1:9222")
+TARGET_USERS = 150
+BATCH_SIZE = 10  # Processes 10 users, then restarts the browser connection
+
+def process_batch(p, start_index, end_index):
+    print(f"\n>>> Connecting to Chrome for Batch {start_index} to {end_index-1}...")
+    browser = p.chromium.connect_over_cdp(CDP_URL)
+    
+    try:
+        for i in range(start_index, end_index):
+            print(f"\n==========================================")
+            print(f"  RUNNING USER {i} OF {TARGET_USERS}")
+            print(f"==========================================")
+            
+            signup_context = browser.new_context()
+            signup_page = signup_context.new_page()
+            
+            try:
+                # --- 1. SIGNUP FLOW ---
+                print(f"--- [Phase 1] Signup ---")
+                signup_result = perform_signup(signup_page)
+                signup_context.close()
+                
+                if not signup_result:
+                    print(f"  -> [Warning] Iteration {i} signup failed.")
+                    continue
+                    
+                time.sleep(2)
+                
+                # --- 2. LOGIN FLOW ---
+                login_context = browser.new_context()
+                login_page = login_context.new_page()
+                
+                print(f"--- [Phase 2] Returning Login ---")
+                login_result = perform_login(login_page)
+                login_context.close()
+                
+                if not login_result:
+                    print(f"  -> [Warning] Iteration {i} login failed.")
+                    
+            except Exception as e:
+                print(f"  -> [Error] Crash on iteration {i}: {e}")
+            finally:
+                if 'signup_context' in locals():
+                    try: signup_context.close()
+                    except: pass
+                if 'login_context' in locals():
+                    try: login_context.close()
+                    except: pass
+
+            time.sleep(1) 
+            
+    finally:
+        print(f">>> Closing Chrome connection to flush memory...")
+        browser.close()
 
 def main():
-    # Ensure the DB file and tables exist before we start
     create_tables()
-    print("Initializing SQLite Database Test Sequence...")
+    print(f"Initializing SQLite Mass Generation for {TARGET_USERS} users...")
     
     with sync_playwright() as p:
-        try:
-            print(f"Connecting to Chrome via CDP at {CDP_URL}...")
-            browser = p.chromium.connect_over_cdp(CDP_URL)
-            context = browser.contexts[0]
+        for current_start in range(1, TARGET_USERS + 1, BATCH_SIZE):
+            current_end = min(current_start + BATCH_SIZE, TARGET_USERS + 1)
+            process_batch(p, current_start, current_end)
             
-            # ==========================================
-            # TEST 1: Perform Signup (Writes to DB)
-            # ==========================================
-            print("\n--- TEST 1: SIGNUP & DATABASE INJECTION ---")
-            page1 = context.new_page()
-            
-            signup_result = perform_signup(page1)
-            page1.close()
-            
-            if signup_result:
-                new_email, _ = signup_result
-                print(f"  -> [Success] Signup completed. {new_email} should now be in database.db")
-            else:
-                print("  -> [Fatal Error] Signup failed. Aborting test.")
-                return
+            if current_end <= TARGET_USERS:
+                print(f"\n[Cooldown] Giving the server 5 seconds to clear database pool...")
+                time.sleep(5)
 
-            # ==========================================
-            # TEST 2: Perform Login (Reads from DB)
-            # ==========================================
-            print("\n--- TEST 2: DATABASE FETCH & RETURNING LOGIN ---")
-            page2 = context.new_page()
-            
-            # 🚨 Calling this without arguments forces it to use get_random_user() from SQLite
-            login_result = perform_login(page2)
-            page2.close()
-            
-            if login_result:
-                print("  -> [Success] Successfully fetched a user from database.db and logged in!")
-            else:
-                print("  -> [Error] Failed to log in returning user.")
-
-        except Exception as e:
-            print(f"\n[Fatal Error] Could not complete tests: {e}")
-            print("Ensure Chrome is currently running with '--remote-debugging-port=9222'")
-        finally:
-            if 'browser' in locals():
-                browser.close()
-            print("\nSQLite Test Sequence Complete.")
+    print("\nMass Generation Sequence Complete.")
 
 if __name__ == "__main__":
     main()
