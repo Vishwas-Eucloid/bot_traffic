@@ -7,6 +7,10 @@
 !/testflow.py
 !/auth/
 !/.gitignore
+!/.github/
+!/testing_sb/
+!/test_signup.py
+!/storage/
 
 # Python
 __pycache__/
@@ -74,5 +78,5 @@ __pycache__/
 first_party_sets.db
 segmentation_platform/ukm_db
 segmentation_platform/ukm_db/
-storage/bot_users.db
+storage/bot_users.db-journal
 Default/Extensions/
