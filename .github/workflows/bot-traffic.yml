@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: write # Needed to save to cache
 
 concurrency:
   group: bot-traffic-cdp
@@ -35,6 +36,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # --- NEW: Restore the database from the previous run ---
+      - name: Restore SQLite Database Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: database.db
+          key: bot-db-${{ github.run_id }}
+          restore-keys: |
+            bot-db-
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -57,7 +67,6 @@ jobs:
           echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list > /dev/null
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
-          google-chrome-stable --version
 
       - name: Configure browser user agent
         shell: bash
@@ -101,13 +110,10 @@ jobs:
           echo "$!" > "${RUNNER_TEMP}/chrome.pid"
           for _ in {1..30}; do
             if curl -fsS "${CHROME_CDP}/json/version" > "${RUNNER_TEMP}/chrome-version.json"; then
-              cat "${RUNNER_TEMP}/chrome-version.json"
               exit 0
             fi
             sleep 1
           done
-          echo "Chrome did not expose CDP on ${CHROME_CDP}"
-          cat "${chrome_log}" || true
           exit 1
 
       - name: Verify analytics endpoints are reachable
@@ -123,9 +129,7 @@ jobs:
           )
           for url in "${urls[@]}"; do
             code="$(curl -L -sS -o /dev/null -w '%{http_code}' --connect-timeout 20 --max-time 30 "${url}" || true)"
-            echo "${url} -> HTTP ${code}"
             if [ "${code}" = "000" ]; then
-              echo "Network connection failed for ${url}"
               exit 1
             fi
           done
@@ -136,9 +140,7 @@ jobs:
           set -euo pipefail
           target_url="$(python -c 'from config import BASE_URL; print(BASE_URL)')"
           code="$(curl -L -sS -o /dev/null -w '%{http_code}' --connect-timeout 20 --max-time 60 "${target_url}" || true)"
-          echo "${target_url} -> HTTP ${code}"
           if [ "${code}" = "000" ]; then
-            echo "Target site was not reachable from the GitHub runner"
             exit 1
           fi
 
@@ -156,6 +158,14 @@ jobs:
         if: github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch'
         run: python main_part2.py
       # ---------------------------------------------------------
+
+      # --- NEW: Save the updated database for the next run ---
+      - name: Save SQLite Database Cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: database.db
+          key: bot-db-${{ github.run_id }}
 
       - name: Stop Chrome
         if: always()
