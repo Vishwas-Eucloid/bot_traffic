@@ -25,9 +25,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: storage/bot_users.db
-          key: bot-db-v2-${{ github.run_id }} # 🚨 CHANGED TO v2
+          key: bot-db-v3-${{ github.run_id }} # 🚨 CHANGED TO v2
           restore-keys: |
-            bot-db-v2-                        # 🚨 CHANGED TO v2
+            bot-db-v3-                        # 🚨 CHANGED TO v2
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -74,4 +74,4 @@ jobs:
         if: always()
         with:
           path: storage/bot_users.db
-          key: bot-db-v2-${{ github.run_id }} # 🚨 CHANGED TO v2
+          key: bot-db-v3-${{ github.run_id }} # 🚨 CHANGED TO v2
