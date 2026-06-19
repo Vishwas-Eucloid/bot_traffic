@@ -1,10 +1,35 @@
 import sys
 import time
+import sqlite3
+from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 from auth.signup import perform_signup
 from database import create_tables, get_random_user
 from config import BASE_URL
+
+
+def view_db():
+    print("\n--- 5. Viewing All Database Contents ---")
+    db_path = Path("storage/bot_users.db")
+    
+    if not db_path.exists():
+        print(f"[ERROR] Database not found at: {db_path}")
+        return
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM bot_users ORDER BY id")
+    rows = cursor.fetchall()
+    conn.close()
+
+    print(f"DB: {db_path}")
+    print(f"Total rows: {len(rows)}\n")
+    print(f"{'ID':<5} {'Email':<40} {'Password':<12} {'Created At'}")
+    print("-" * 85)
+    for row in rows:
+        print(f"{row[0]:<5} {row[1]:<40} {row[2]:<12} {row[3]}")
+    print("\n")
 
 
 def run_test():
@@ -57,8 +82,6 @@ def run_test():
     print("--- 4. Verifying Database Persistence ---")
     try:
         # Fetch all users and check our email is in there
-        import sqlite3
-        from pathlib import Path
         conn = sqlite3.connect(Path("storage/bot_users.db"))
         cursor = conn.cursor()
         cursor.execute("SELECT email FROM bot_users WHERE email = ?", (signed_up_email,))
@@ -71,6 +94,9 @@ def run_test():
             print(f"[FAIL] User '{signed_up_email}' was NOT found in the database.\n")
     except Exception as e:
         print(f"[FAIL] Database verification error: {e}\n")
+
+    # --- Check 5: View Database Contents ---
+    view_db()
 
     print("==================================")
     print("   SIGNUP TEST COMPLETE")
